@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vectorizador PNG → SVG · NVIDIA NIM</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111114;
+    --surface2: #1a1a1f;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8e8ea;
+    --text2: #9090a0;
+    --text3: #555560;
+    --green: #76b900;
+    --green2: #5a8d00;
+    --green-bg: rgba(118,185,0,0.08);
+    --green-glow: rgba(118,185,0,0.15);
+    --accent: #76b900;
+    --success: #76b900;
+    --danger: #f87171;
+    --radius: 10px;
+    --radius-sm: 7px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem 4rem;
+  }
+  header { text-align: center; margin-bottom: 2.2rem; }
+  .logo-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin-bottom: 0.6rem;
+  }
+  .nv-badge {
+    background: var(--green); color: #000;
+    font-size: 0.7rem; font-weight: 800;
+    padding: 3px 7px; border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+  header h1 {
+    font-size: 1.85rem; font-weight: 700;
+    letter-spacing: -0.03em; color: var(--text);
+  }
+  header h1 span { color: var(--green); }
+  header p { color: var(--text2); font-size: 0.9rem; margin-top: 0.3rem; }
+
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    width: 100%; max-width: 800px;
+  }
+
+  /* MODEL SELECTOR */
+  .model-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 8px; margin-bottom: 1.25rem;
+  }
+  @media (max-width: 540px) { .model-row { grid-template-columns: 1fr; } }
+  .model-option {
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .model-option:hover { border-color: var(--green); background: var(--green-bg); }
+  .model-option.selected { border-color: var(--green); background: var(--green-bg); }
+  .model-option.selected::after {
+    content: '✓';
+    position: absolute; top: 8px; right: 10px;
+    color: var(--green); font-size: 0.8rem; font-weight: 700;
+  }
+  .model-name { font-size: 0.82rem; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .model-desc { font-size: 0.72rem; color: var(--text2); }
+  .model-tag {
+    display: inline-block; margin-top: 5px;
+    background: var(--green-bg); color: var(--green);
+    font-size: 0.65rem; font-weight: 600;
+    padding: 2px 7px; border-radius: 99px; letter-spacing: 0.04em;
+  }
+
+  /* KEY ROW */
+  .key-row { margin-bottom: 1.25rem; }
+  .key-row label {
+    display: flex; flex-direction: column; gap: 5px;
+    font-size: 0.75rem; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.07em;
+  }
+  .key-input-wrap { display: flex; gap: 8px; }
+  .key-row input {
+    flex: 1;
+    background: var(--surface2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    color: var(--text); font-size: 0.86rem;
+    padding: 0.55rem 0.85rem; outline: none;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    transition: border-color 0.15s;
+  }
+  .key-row input:focus { border-color: var(--green); }
+  .btn-sm {
+    background: var(--surface2); color: var(--text2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem; padding: 0 0.9rem;
+    cursor: pointer; white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .btn-sm:hover { border-color: var(--green); color: var(--green); }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 2.5rem 1.5rem;
+    text-align: center; cursor: pointer;
+    transition: all 0.2s; background: transparent;
+    position: relative; margin-bottom: 1.1rem;
+  }
+  .drop-zone:hover, .drop-zone.over {
+    border-color: var(--green); background: var(--green-bg);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0;
+    cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 2.5rem; margin-bottom: 0.6rem; }
+  .drop-zone p { color: var(--text2); font-size: 0.88rem; }
+  .drop-zone span { color: var(--green); }
+
+  /* SETTINGS */
+  .settings {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 1.1rem; align-items: flex-end;
+  }
+  .settings label {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 0.72rem; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    flex: 1; min-width: 120px;
+  }
+  .settings select, .settings input[type=number] {
+    background: var(--surface2); border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-size: 0.86rem; padding: 0.48rem 0.7rem; outline: none;
+    transition: border-color 0.15s;
+  }
+  .settings select:focus, .settings input[type=number]:focus { border-color: var(--green); }
+
+  /* BUTTON */
+  .btn {
+    background: var(--green); color: #000;
+    border: none; border-radius: var(--radius-sm);
+    font-size: 0.92rem; font-weight: 700;
+    padding: 0.7rem 1.5rem; cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s; width: 100%;
+    letter-spacing: 0.01em;
+  }
+  .btn:hover { opacity: 0.88; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* STATUS */
+  .status {
+    margin-top: 0.9rem; padding: 0.7rem 1rem;
+    border-radius: var(--radius-sm); font-size: 0.84rem; display: none;
+  }
+  .status.info { background: rgba(99,102,241,0.08); color: #a5b4fc; border: 0.5px solid rgba(99,102,241,0.2); }
+  .status.error { background: rgba(248,113,113,0.08); color: var(--danger); border: 0.5px solid rgba(248,113,113,0.18); }
+  .status.success { background: rgba(118,185,0,0.08); color: var(--green); border: 0.5px solid rgba(118,185,0,0.22); }
+  .status.visible { display: block; }
+
+  /* PROGRESS */
+  .progress-bar { height: 2px; background: var(--border2); border-radius: 2px; margin-top: 0.7rem; overflow: hidden; display: none; }
+  .progress-bar.visible { display: block; }
+  .progress-fill { height: 100%; width: 0%; background: var(--green); border-radius: 2px; transition: width 0.35s ease; }
+
+  /* PREVIEW */
+  .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 1.4rem; }
+  @media (max-width: 540px) { .preview-grid { grid-template-columns: 1fr; } }
+  .preview-box {
+    background: var(--surface2); border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm); overflow: hidden;
+  }
+  .pb-header {
+    padding: 0.45rem 0.85rem; font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text3); border-bottom: 0.5px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .badge {
+    font-size: 0.65rem; background: var(--green-bg);
+    color: var(--green); padding: 2px 7px;
+    border-radius: 99px; letter-spacing: 0.04em;
+  }
+  .pb-body {
+    min-height: 190px; display: flex;
+    align-items: center; justify-content: center; padding: 1rem;
+  }
+  .pb-body img, .pb-body svg {
+    max-width: 100%; max-height: 260px; object-fit: contain;
+  }
+  .placeholder-text { color: var(--text3); font-size: 0.8rem; text-align: center; }
+
+  /* DL ROW */
+  .dl-row { display: flex; gap: 8px; margin-top: 0.9rem; }
+  .btn-outline {
+    background: transparent; color: var(--green);
+    border: 0.5px solid var(--green);
+    border-radius: var(--radius-sm); font-size: 0.82rem;
+    font-weight: 500; padding: 0.5rem 1rem;
+    cursor: pointer; transition: background 0.15s; flex: 1;
+  }
+  .btn-outline:hover { background: var(--green-bg); }
+
+  /* CODE */
+  .code-block {
+    background: var(--bg); border-radius: var(--radius-sm);
+    padding: 0.75rem; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.7rem; color: var(--text2); overflow: auto;
+    max-height: 170px; white-space: pre; margin-top: 0.9rem;
+    border: 0.5px solid var(--border); display: none;
+  }
+  .code-block.visible { display: block; }
+
+  .divider { height: 0.5px; background: var(--border); margin: 1.2rem 0; }
+
+  .tip {
+    font-size: 0.76rem; color: var(--text3);
+    border-left: 2px solid var(--green-bg);
+    padding-left: 0.75rem; margin-bottom: 1.1rem;
+    line-height: 1.6;
+  }
+  .tip a { color: var(--green); text-decoration: none; }
+  .tip a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <span class="nv-badge">NVIDIA</span>
+    <span style="color:var(--text3); font-size:0.8rem;">NIM · Free Endpoint</span>
+  </div>
+  <h1>PNG <span>→ SVG</span> Vectorizador</h1>
+  <p>Vectoriza imágenes gratis usando modelos de visión de NVIDIA</p>
+</header>
+
+<div class="card">
+
+  <!-- TIP -->
+  <div class="tip">
+    Obtén tu API Key gratis en <a href="https://build.nvidia.com" target="_blank">build.nvidia.com</a> → Sign up → Get API Key. No requiere tarjeta de crédito para los Free Endpoints.
+  </div>
+
+  <!-- MODEL SELECTOR -->
+  <div style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:0.6rem;">Modelo con visión (Free Endpoint)</div>
+  <div class="model-row" id="modelGrid">
+    <div class="model-option selected" data-model="meta/llama-4-maverick-17b-128e-instruct">
+      <div class="model-name">Llama 4 Maverick</div>
+      <div class="model-desc">17B MoE · multimodal · multilingüe</div>
+      <span class="model-tag">FREE · Meta</span>
+    </div>
+    <div class="model-option" data-model="meta/llama-3.2-90b-vision-instruct">
+      <div class="model-name">Llama 3.2 Vision 90B</div>
+      <div class="model-desc">90B · razonamiento visual avanzado</div>
+      <span class="model-tag">FREE · Meta</span>
+    </div>
+    <div class="model-option" data-model="microsoft/phi-4-multimodal-instruct">
+      <div class="model-name">Phi-4 Multimodal</div>
+      <div class="model-desc">Compacto · imagen + audio · Microsoft</div>
+      <span class="model-tag">FREE · Microsoft</span>
+    </div>
+    <div class="model-option" data-model="qwen/qwen3.5-397b-a17b">
+      <div class="model-name">Qwen 3.5 VLM</div>
+      <div class="model-desc">397B MoE · visión avanzada · Alibaba</div>
+      <span class="model-tag">FREE · Alibaba</span>
+    </div>
+  </div>
+
+  <!-- KEY -->
+  <div class="key-row">
+    <label>
+      NVIDIA API Key
+      <div class="key-input-wrap">
+        <input type="password" id="apiKey" placeholder="nvapi-..." autocomplete="off" />
+        <button class="btn-sm" onclick="window.open('https://build.nvidia.com','_blank')">Obtener key ↗</button>
+      </div>
+    </label>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- DROP ZONE -->
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" />
+    <div class="drop-icon">🖼️</div>
+    <p>Arrastra tu imagen aquí o <span>haz clic para seleccionar</span></p>
+    <p style="font-size:0.75rem; margin-top:0.35rem; color: var(--text3);">PNG, JPG, WEBP — máx 5 MB</p>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="settings">
+    <label>
+      Estilo
+      <select id="style">
+        <option value="clean">Limpio / minimalista</option>
+        <option value="detailed">Detallado</option>
+        <option value="logo">Logo / ícono</option>
+        <option value="flat">Flat design</option>
+        <option value="outline">Solo contornos</option>
+      </select>
+    </label>
+    <label>
+      Colores máx.
+      <input type="number" id="maxColors" value="6" min="1" max="20" />
+    </label>
+    <label>
+      Canvas (px)
+      <input type="number" id="svgSize" value="512" min="64" max="2048" />
+    </label>
+  </div>
+
+  <button class="btn" id="vectorizeBtn" disabled>⚡ Vectorizar imagen</button>
+
+  <div class="status" id="status"></div>
+  <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <!-- PREVIEWS -->
+  <div class="preview-grid" id="previewGrid" style="display:none;">
+    <div class="preview-box">
+      <div class="pb-header">Original <span class="badge">PNG</span></div>
+      <div class="pb-body"><img id="origImg" src="" alt="Original" /></div>
+    </div>
+    <div class="preview-box">
+      <div class="pb-header">Vectorizado <span class="badge">SVG</span></div>
+      <div class="pb-body" id="svgPreviewBox"><p class="placeholder-text">Aquí aparecerá el SVG</p></div>
+    </div>
+  </div>
+
+  <div class="dl-row" id="dlRow" style="display:none;">
+    <button class="btn-outline" id="downloadBtn">⬇ Descargar SVG</button>
+    <button class="btn-outline" id="copyBtn">⎘ Copiar código</button>
+  </div>
+
+  <pre class="code-block" id="codeBlock"></pre>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let currentFile = null;
+let currentSVG = '';
+let selectedModel = 'meta/llama-4-maverick-17b-128e-instruct';
+
+// Restore key
+const saved = localStorage.getItem('nvidia_nim_key');
+if (saved) $('apiKey').value = saved;
+$('apiKey').addEventListener('blur', () => {
+  localStorage.setItem('nvidia_nim_key', $('apiKey').value.trim());
+});
+
+// Model selection
+document.querySelectorAll('.model-option').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.model-option').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedModel = el.dataset.model;
+  });
+});
+
+// Drag & drop
+const dropZone = $('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+$('fileInput').addEventListener('change', () => { if ($('fileInput').files[0]) handleFile($('fileInput').files[0]); });
+
+function handleFile(file) {
+  if (!file.type.startsWith('image/')) return showStatus('Solo se aceptan imágenes PNG, JPG o WEBP.', 'error');
+  if (file.size > 5 * 1024 * 1024) return showStatus('La imagen excede 5 MB.', 'error');
+  currentFile = file;
+  $('origImg').src = URL.createObjectURL(file);
+  $('previewGrid').style.display = 'grid';
+  $('svgPreviewBox').innerHTML = '<p class="placeholder-text">Listo para vectorizar ↗</p>';
+  $('dlRow').style.display = 'none';
+  $('codeBlock').classList.remove('visible');
+  $('vectorizeBtn').disabled = false;
+  showStatus('Imagen cargada. Presiona "Vectorizar imagen".', 'info');
+}
+
+function showStatus(msg, type = 'info') {
+  const s = $('status');
+  s.textContent = msg;
+  s.className = `status ${type} visible`;
+}
+
+function setProgress(pct) {
+  $('progressBar').classList.add('visible');
+  $('progressFill').style.width = pct + '%';
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Error al leer archivo'));
+    r.readAsDataURL(file);
+  });
+}
+
+const styleDesc = {
+  clean: 'minimal and clean with simple shapes, smooth bezier curves, reduced noise',
+  detailed: 'detailed, faithful to the original with fine shapes and textures',
+  logo: 'logo/icon style: bold, high contrast, geometric, branding-ready',
+  flat: 'flat design: solid fills, no gradients, strong geometric shapes',
+  outline: 'outline only: strokes and contours, minimal or transparent fills'
+};
+
+$('vectorizeBtn').addEventListener('click', async () => {
+  const apiKey = $('apiKey').value.trim();
+  if (!apiKey) return showStatus('Ingresa tu NVIDIA API Key primero.', 'error');
+  if (!currentFile) return showStatus('Primero selecciona una imagen.', 'error');
+
+  $('vectorizeBtn').disabled = true;
+  setProgress(10);
+  showStatus('Procesando imagen, separando colores y trazando con Potrace…', 'info');
+
+  try {
+    const b64 = await fileToBase64(currentFile);
+    const mime = currentFile.type || 'image/png';
+    const maxColors = parseInt($('maxColors').value) || 6;
+    const model = selectedModel;
+
+    setProgress(35);
+    showStatus(`Separando contornos y coloreando con ${model.split('/').pop()}…`, 'info');
+
+    const resp = await fetch('http://localhost:3456/vectorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        image: b64,
+        mimeType: mime,
+        maxColors,
+        model,
+        style: $('style').value
+      })
+    });
+
+    setProgress(80);
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const msg = err.error || err.message || `HTTP ${resp.status}`;
+      throw new Error(msg);
+    }
+
+    const data = await resp.json();
+    if (!data.svg) {
+      throw new Error('El servidor no devolvió ningún SVG.');
+    }
+
+    const svgCode = data.svg;
+    currentSVG = svgCode;
+    setProgress(95);
+
+    // Show SVG
+    $('svgPreviewBox').innerHTML = svgCode;
+    const svgEl = $('svgPreviewBox').querySelector('svg');
+    if (svgEl) { svgEl.style.maxWidth = '100%'; svgEl.style.maxHeight = '260px'; }
+
+    $('codeBlock').textContent = svgCode;
+    $('codeBlock').classList.add('visible');
+    $('dlRow').style.display = 'flex';
+    setProgress(100);
+    showStatus('¡SVG generado! Formas vectoriales exactas (Potrace) + Colores semánticos (IA).', 'success');
+    localStorage.setItem('nvidia_nim_key', apiKey);
+
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+    $('progressBar').classList.remove('visible');
+  } finally {
+    $('vectorizeBtn').disabled = false;
+    setTimeout(() => { $('progressBar').classList.remove('visible'); $('progressFill').style.width = '0%'; }, 1200);
+  }
+});
+
+$('downloadBtn').addEventListener('click', () => {
+  if (!currentSVG) return;
+  const blob = new Blob([currentSVG], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (currentFile?.name.replace(/\.[^.]+$/, '') || 'vectorizado') + '.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$('copyBtn').addEventListener('click', () => {
+  if (!currentSVG) return;
+  navigator.clipboard.writeText(currentSVG).then(() => {
+    $('copyBtn').textContent = '✓ Copiado';
+    setTimeout(() => { $('copyBtn').textContent = '⎘ Copiar código'; }, 2000);
+  });
+});
+</script>
+</body>
+</html>
